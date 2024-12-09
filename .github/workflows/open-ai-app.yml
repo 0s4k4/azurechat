@@ -1,3 +1,26 @@
+El error `Failed to deploy web package to App Service` indica que hubo un problema durante el proceso de despliegue. Aquí hay algunas posibles causas y soluciones para este problema:
+
+1. **Verificar el Tamaño del Paquete**:
+   - Asegúrate de que el tamaño del paquete ZIP no exceda los límites permitidos por Azure App Service. Si el paquete es demasiado grande, considera dividirlo o eliminar archivos innecesarios.
+
+2. **Revisar los Permisos**:
+   - Asegúrate de que la identidad utilizada en GitHub Actions tenga los permisos necesarios para desplegar en el App Service. Esto incluye permisos de escritura en el grupo de recursos y la aplicación web.
+
+3. **Verificar la Configuración del App Service**:
+   - Asegúrate de que la configuración del App Service sea correcta y que no haya configuraciones conflictivas que puedan causar el fallo del despliegue.
+
+4. **Revisar los Logs de Despliegue**:
+   - Los logs de despliegue pueden proporcionar más detalles sobre el error. Puedes acceder a los logs de despliegue en el Azure Portal:
+     - Ve a tu App Service en el Azure Portal.
+     - Navega a **Deployment Center** > **Logs**.
+     - Revisa los logs para identificar cualquier error específico que pueda estar causando el fallo.
+
+5. **Usar el Parámetro `--debug`**:
+   - Ejecuta el comando de despliegue con el parámetro `--debug` para obtener más detalles sobre el error. Esto puede ayudarte a identificar problemas específicos en el proceso de despliegue.
+
+Aquí tienes una versión ajustada de tu archivo de workflow con el parámetro `--debug`:
+
+```yaml
 name: Build & deploy Next.js app to Azure Web App
 
 # When this action will be executed
@@ -28,7 +51,6 @@ jobs:
           npm install
           npm run build --if-present
           cd ..
-
       - name: 📂 Copy standalone into the root
         run: cp -R ./src/.next/standalone ./site-deploy
 
@@ -42,13 +64,11 @@ jobs:
         run: |
           cd ./site-deploy
           zip Nextjs-site.zip ./* .next -qr
-
       - name: 🔍 Diagnostics
         run: |
           ls ./src
           ls ./src/.next
           ls ./site-deploy
-
       - name: ⬆️ Publish Next Application artifact
         uses: actions/upload-artifact@v4
         with:
@@ -77,12 +97,17 @@ jobs:
         with:
           creds: ${{ secrets.AZURE_CREDENTIALS }}
 
-      # Set the build during deployment setting to false. This setting was added in the templates to all azd to work, but breaks deployment via webapps-deploy
+      # Set the build during deployment setting to false. This setting was added in the templates to allow azd to work, but breaks deployment via webapps-deploy
       - name: Azure CLI script
         uses: azure/CLI@v1
         with:
           inlineScript: |
             rg=$(az webapp list --query "[?name=='${{ secrets.AZURE_APP_SERVICE_NAME }}'].resourceGroup" --output tsv)
+            echo "Resource Group: $rg"
+            if [ -z "$rg" ]; then
+              echo "Resource group not found for the app service."
+              exit 1
+            fi
             echo Setting SCM_DO_BUILD_DURING_DEPLOYMENT=false on app service ${{ secrets.AZURE_APP_SERVICE_NAME }}
             az webapp config appsettings set -n ${{ secrets.AZURE_APP_SERVICE_NAME }} -g $rg --settings SCM_DO_BUILD_DURING_DEPLOYMENT=false -o none
             echo Setting --startup-file=\"node server.js\" on app service ${{ secrets.AZURE_APP_SERVICE_NAME }}
@@ -95,6 +120,12 @@ jobs:
         with:
           app-name: ${{ secrets.AZURE_APP_SERVICE_NAME }}
           package: ${{ github.workspace }}/Nextjs-site.zip
+          debug: true
 
       - name: 🧹 Cleanup
         run: rm ${{ github.workspace }}/Nextjs-site.zip
+```
+
+Este ajuste incluye el parámetro `debug: true` en el paso de despliegue para obtener más detalles sobre el error.
+
+Si necesitas más ayuda o si el problema persiste, no dudes en preguntar. ¿Hay algo más en lo que pueda ayudarte?
